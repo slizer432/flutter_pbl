@@ -7,6 +7,8 @@ import '../widgets/image_preview.dart';
 import '../widgets/action_buttons.dart';
 import '../widgets/detection_result.dart';
 
+import 'package:image_picker/image_picker.dart';
+
 class SignLanguageDetectorScreen extends StatefulWidget {
   const SignLanguageDetectorScreen({super.key});
 
@@ -142,18 +144,46 @@ class _SignLanguageDetectorScreenState
     );
   }
 
+  final ImagePicker _picker = ImagePicker();
+
   Future<void> _takePhoto() async {
-    // TODO: Connect to camera plugin (image_picker / camera)
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Fungsi kamera akan diimplementasikan')),
-    );
+    try {
+      final XFile? photo = await _picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 80,
+      );
+
+      if (photo != null) {
+        setState(() {
+          _selectedImage = File(photo.path);
+          _detectionResult = null;
+        });
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error mengambil foto: $e')),
+      );
+    }
   }
 
   Future<void> _pickPhoto() async {
-    // TODO: Connect to gallery picker plugin
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Fungsi galeri akan diimplementasikan')),
-    );
+    try {
+      final XFile? image = await _picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 80,
+      );
+
+      if (image != null) {
+        setState(() {
+          _selectedImage = File(image.path);
+          _detectionResult = null;
+        });
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error memilih foto: $e')),
+      );
+    }
   }
 
   Future<void> _detectSign() async {

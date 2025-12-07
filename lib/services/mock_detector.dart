@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 Future<String> detectSignLanguage(File image) async {
   // Simulate processing time
