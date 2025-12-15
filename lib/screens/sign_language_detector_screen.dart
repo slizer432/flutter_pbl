@@ -3,9 +3,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../services/mock_detector.dart';
+import '../services/auth_service.dart';
 import '../widgets/image_preview.dart';
 import '../widgets/action_buttons.dart';
 import '../widgets/detection_result.dart';
+import 'login_screen.dart';
 
 import 'package:image_picker/image_picker.dart';
 
@@ -22,6 +24,63 @@ class _SignLanguageDetectorScreenState
   File? _selectedImage;
   String? _detectionResult;
   bool _isLoading = false;
+  String _userName = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserName();
+  }
+
+  Future<void> _loadUserName() async {
+    final user = await AuthService.getCurrentUser();
+    if (user != null) {
+      setState(() {
+        _userName = user['name'] ?? '';
+      });
+    }
+  }
+
+  Future<void> _logout() async {
+    // Show confirmation dialog
+    final shouldLogout = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Logout'),
+        content: const Text('Apakah Anda yakin ingin keluar?'),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Logout'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldLogout == true) {
+      await AuthService.logout();
+
+      if (!mounted) return;
+
+      // Navigate to login screen
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (context) => const LoginScreen(),
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -33,6 +92,55 @@ class _SignLanguageDetectorScreenState
         ),
         centerTitle: true,
         elevation: 0,
+        actions: [
+          // User info & Logout button
+          PopupMenuButton<String>(
+            icon: CircleAvatar(
+              backgroundColor: Colors.deepPurple.shade100,
+              child: Icon(
+                Icons.person,
+                color: Colors.deepPurple.shade700,
+              ),
+            ),
+            onSelected: (value) {
+              if (value == 'logout') {
+                _logout();
+              }
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                enabled: false,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _userName,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    const Divider(),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'logout',
+                child: Row(
+                  children: [
+                    Icon(Icons.logout, color: Colors.red),
+                    SizedBox(width: 12),
+                    Text(
+                      'Logout',
+                      style: TextStyle(color: Colors.red),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         child: Padding(
@@ -125,9 +233,9 @@ class _SignLanguageDetectorScreenState
                     const SizedBox(height: 12),
                     Text(
                       '• Pastikan pencahayaan cukup untuk hasil optimal\n'
-                      '• Letakkan tangan di tengah frame\n'
-                      '• Hindari gerakan blur\n'
-                      '• Gunakan background yang kontras dengan tangan',
+                          '• Letakkan tangan di tengah frame\n'
+                          '• Hindari gerakan blur\n'
+                          '• Gunakan background yang kontras dengan tangan',
                       style: TextStyle(
                         fontSize: 12,
                         color: Colors.grey.shade700,

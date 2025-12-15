@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'screens/sign_language_detector_screen.dart';
+import 'screens/splash_screen.dart';
 
 void main() {
   runApp(const MainApp());
@@ -17,7 +17,7 @@ class MainApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
-      home: const SignLanguageDetectorScreen(),
+      home: const SplashScreen(), // Start with splash screen
     );
   }
 }
