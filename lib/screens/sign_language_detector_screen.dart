@@ -8,6 +8,7 @@ import '../widgets/image_preview.dart';
 import '../widgets/action_buttons.dart';
 import '../widgets/detection_result.dart';
 import 'login_screen.dart';
+import 'realtime_detection_screen.dart';
 
 import 'package:image_picker/image_picker.dart';
 
@@ -181,6 +182,29 @@ class _SignLanguageDetectorScreenState
                       ),
                     ),
                   ],
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Real-time Detection Button
+              ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const RealtimeDetectionScreen(),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.videocam),
+                label: const Text('Real-time Detection'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
               ),
               const SizedBox(height: 24),
