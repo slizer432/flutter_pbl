@@ -1,4 +1,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Camera permissions for hand detection -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="true" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+    <!-- Internet permission for Python server communication -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    
     <application
         android:label="flutter_pbl"
         android:name="${applicationName}"
