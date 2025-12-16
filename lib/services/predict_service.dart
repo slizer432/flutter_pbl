@@ -21,7 +21,7 @@ class PredictService {
   /// - Android Emulator: http://10.0.2.2:8000
   /// - Physical Device: http://<YOUR_PC_IP>:8000
   /// - Same device: http://localhost:8000
-  static const String _baseUrl = 'http://10.29.57.179:8000';
+  static const String _baseUrl = 'http://10.30.196.179:8000';
 
   /// Timeout for HTTP requests
   static const Duration _timeout = Duration(seconds: 5);

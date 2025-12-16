@@ -33,6 +33,8 @@ class _RealtimeDetectionScreenState extends State<RealtimeDetectionScreen>
   CameraController? _cameraController;
   List<CameraDescription> _cameras = [];
   bool _isCameraInitialized = false;
+  int _sensorOrientation = 0;
+  bool _isFrontCamera = true;
 
   // Hand landmarker
   HandLandmarkerPlugin? _handLandmarker;
@@ -47,7 +49,7 @@ class _RealtimeDetectionScreenState extends State<RealtimeDetectionScreen>
   // Auto-save timer (3 seconds)
   Timer? _autoSaveTimer;
   String _lastSavedLetter = '';
-  static const Duration _saveInterval = Duration(seconds: 3);
+  static const Duration _saveInterval = Duration(seconds: 2);
 
   // Prediction history
   List<PredictionItem> _predictionHistory = [];
@@ -64,6 +66,10 @@ class _RealtimeDetectionScreenState extends State<RealtimeDetectionScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Lock screen orientation to portrait
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+    ]);
     _initializeAll();
   }
 
@@ -74,6 +80,13 @@ class _RealtimeDetectionScreenState extends State<RealtimeDetectionScreen>
     _autoSaveTimer?.cancel();
     _cameraController?.dispose();
     _handLandmarker?.dispose();
+    // Restore default orientations when leaving screen
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
     super.dispose();
   }
 
@@ -121,10 +134,14 @@ class _RealtimeDetectionScreenState extends State<RealtimeDetectionScreen>
         orElse: () => _cameras.first,
       );
 
+      _sensorOrientation = frontCamera.sensorOrientation;
+      _isFrontCamera = frontCamera.lensDirection == CameraLensDirection.front;
+
       _cameraController = CameraController(
         frontCamera,
         ResolutionPreset.medium,
         enableAudio: false,
+        imageFormatGroup: ImageFormatGroup.yuv420,
       );
 
       await _cameraController!.initialize();
@@ -233,10 +250,12 @@ class _RealtimeDetectionScreenState extends State<RealtimeDetectionScreen>
     _isDetecting = true;
 
     try {
-      // Detect hand landmarks
+      // Pass 0 for rotation - the model was likely trained with raw camera data
+      // This makes portrait mode behave like landscape internally
+      // which matches how your SVM model was trained
       final hands = _handLandmarker!.detect(
         image,
-        _cameraController!.description.sensorOrientation,
+        0, // Use 0 to get raw coordinates matching training data
       );
 
       if (!mounted) return;
@@ -249,10 +268,11 @@ class _RealtimeDetectionScreenState extends State<RealtimeDetectionScreen>
         });
       } else {
         // Convert to LandmarkPoint list
+        // Since we adjusted rotation in detect(), coordinates should be correct for portrait
         final hand = hands.first;
-        final landmarks = hand.landmarks
-            .map((lm) => LandmarkPoint(x: lm.x, y: lm.y, z: lm.z))
-            .toList();
+        final landmarks = hand.landmarks.map((lm) {
+          return LandmarkPoint(x: lm.x, y: lm.y, z: lm.z);
+        }).toList();
 
         setState(() => _currentLandmarks = landmarks);
 
@@ -270,10 +290,16 @@ class _RealtimeDetectionScreenState extends State<RealtimeDetectionScreen>
 
   Future<void> _runPrediction(List<Landmark> landmarks) async {
     // Convert landmarks to feature vector [x1,y1,z1,...,x21,y21,z21]
+    // Rotate coordinates 90° CCW to match training data orientation
+    // Training was done with 1:1 images in a specific orientation
+    // Camera sensor is typically 270°, so we need to rotate landmarks
     final features = <double>[];
     for (final lm in landmarks) {
-      features.add(lm.x);
-      features.add(lm.y);
+      // Rotate 90° counter-clockwise: (x, y) -> (y, 1-x)
+      final rotatedX = lm.y;
+      final rotatedY = 1.0 - lm.x;
+      features.add(rotatedX);
+      features.add(rotatedY);
       features.add(lm.z);
     }
 
@@ -282,7 +308,9 @@ class _RealtimeDetectionScreenState extends State<RealtimeDetectionScreen>
 
     if (mounted && result != null) {
       setState(() {
-        _currentPrediction = result.prediction;
+        // Extract only first character (e.g., "A" from "A_1X1")
+        final prediction = result.prediction;
+        _currentPrediction = prediction.isNotEmpty ? prediction[0] : '';
         _currentConfidence = result.confidence;
       });
     }
@@ -308,6 +336,9 @@ class _RealtimeDetectionScreenState extends State<RealtimeDetectionScreen>
       });
 
       _saveHistory();
+
+      // Haptic feedback when prediction is saved
+      HapticFeedback.mediumImpact();
     }
   }
 
@@ -340,8 +371,16 @@ class _RealtimeDetectionScreenState extends State<RealtimeDetectionScreen>
       body: SafeArea(
         child: Column(
           children: [
-            // Camera preview with overlay
-            Expanded(flex: 3, child: _buildCameraPreview()),
+            // Camera preview with overlay and status badges
+            Expanded(
+              flex: 3,
+              child: Stack(
+                children: [
+                  Center(child: _buildCameraPreview()),
+                  _buildStatusBadges(),
+                ],
+              ),
+            ),
 
             // Current prediction display
             _buildPredictionDisplay(),
@@ -396,86 +435,107 @@ class _RealtimeDetectionScreenState extends State<RealtimeDetectionScreen>
       );
     }
 
+    // Get camera preview size for proper aspect ratio
+    final previewSize = _cameraController!.value.previewSize!;
+    final isPortrait = MediaQuery.of(context).orientation == Orientation.portrait;
+    final cameraAspectRatio = isPortrait
+        ? previewSize.height / previewSize.width
+        : previewSize.width / previewSize.height;
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          // Camera preview (mirrored for front camera)
-          Transform.flip(
-            flipX: _cameraController!.description.lensDirection ==
-                CameraLensDirection.front,
-            child: CameraPreview(_cameraController!),
-          ),
+      child: AspectRatio(
+        aspectRatio: 1.0, // 1:1 square ratio
+        child: ClipRect(
+          child: OverflowBox(
+            alignment: Alignment.center,
+            child: FittedBox(
+              fit: BoxFit.cover,
+              child: SizedBox(
+                width: 1,
+                height: cameraAspectRatio,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // Camera preview (no mirror)
+                    CameraPreview(_cameraController!),
 
-          // Hand landmark overlay
-          if (_currentLandmarks != null)
-            HandOverlay(
-              landmarks: _currentLandmarks,
-              mirrorX: false, // Already mirrored by Transform
-              sensorRotation: 0,
-            ),
-
-          // Detection status badge
-          Positioned(
-            top: 16,
-            left: 16,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: _currentLandmarks != null
-                    ? Colors.green.withValues(alpha: 0.8)
-                    : Colors.red.withValues(alpha: 0.8),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    _currentLandmarks != null
-                        ? Icons.check_circle
-                        : Icons.cancel,
-                    color: Colors.white,
-                    size: 16,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    _currentLandmarks != null ? 'Hand Detected' : 'No Hand',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // Detection running indicator
-          Positioned(
-            top: 16,
-            right: 16,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: _isDetectionRunning
-                    ? Colors.green.withValues(alpha: 0.8)
-                    : Colors.orange.withValues(alpha: 0.8),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                _isDetectionRunning ? 'Running' : 'Stopped',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
+                    // Hand landmark overlay - HIDDEN
+                    // if (_currentLandmarks != null)
+                    //   HandOverlay(
+                    //     landmarks: _currentLandmarks,
+                    //     mirrorX: false,
+                    //     sensorRotation: 0,
+                    //   ),
+                  ],
                 ),
               ),
             ),
           ),
-        ],
+        ),
       ),
+    );
+  }
+
+  Widget _buildStatusBadges() {
+    return Stack(
+      children: [
+        // Detection status badge
+        Positioned(
+          top: 16,
+          left: 16,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: _currentLandmarks != null
+                  ? Colors.green.withValues(alpha: 0.8)
+                  : Colors.red.withValues(alpha: 0.8),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  _currentLandmarks != null ? Icons.check_circle : Icons.cancel,
+                  color: Colors.white,
+                  size: 16,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  _currentLandmarks != null ? 'Hand Detected' : 'No Hand',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        // Detection running indicator
+        Positioned(
+          top: 16,
+          right: 16,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: _isDetectionRunning
+                  ? Colors.green.withValues(alpha: 0.8)
+                  : Colors.orange.withValues(alpha: 0.8),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              _isDetectionRunning ? 'Running' : 'Stopped',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 

@@ -52,19 +52,20 @@ class LandmarkPoint {
   });
 
   /// Convert normalized coordinates to screen coordinates.
+  /// Coordinates should already be transformed for display orientation.
   ///
   /// [size] - The size of the canvas/preview
   /// [mirrorX] - Whether to flip horizontally (for front camera)
-  /// [rotation] - Rotation in degrees (0, 90, 180, 270)
+  /// [rotation] - Rotation in degrees (0, 90, 180, 270) - usually 0 if pre-transformed
   Offset toScreen(
     Size size, {
-    bool mirrorX = true,
+    bool mirrorX = false,
     int rotation = 0,
   }) {
     double screenX = x;
     double screenY = y;
 
-    // Apply rotation
+    // Apply rotation (usually not needed if coordinates are pre-transformed)
     switch (rotation) {
       case 90:
         final temp = screenX;
@@ -82,7 +83,7 @@ class LandmarkPoint {
         break;
     }
 
-    // Mirror for front camera
+    // Mirror if needed
     if (mirrorX) {
       screenX = 1.0 - screenX;
     }
